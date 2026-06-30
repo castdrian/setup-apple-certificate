@@ -142,10 +142,10 @@ Your persistent private key → RSA public key (n=123...789, e=65537)
 
 This action supports two certificate types:
 
-| Type | Description | Use Case | Profile Type |
-|---|---|---|---|
-| **APP_STORE** (default) | Apple Distribution certificate | Submitting apps to the App Store | `IOS_APP_STORE` |
-| **DEVELOPER_ID** | Developer ID Application certificate | Distributing apps outside the App Store | `IOS_APP_ADHOC` |
+| Type | Description | Use Case | Profile Type | Platform |
+|---|---|---|---|---|
+| **APP_STORE** (default) | Apple Distribution certificate | Submitting iOS apps to the App Store | `IOS_APP_STORE` | iOS |
+| **DEVELOPER_ID** | Developer ID Application certificate | Distributing macOS apps outside the App Store (notarization) | `MAC_APP_DIRECT` | macOS |
 
 To use Developer ID certificates:
 

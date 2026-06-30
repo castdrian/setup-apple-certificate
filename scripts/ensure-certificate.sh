@@ -41,7 +41,7 @@ case "$CERTIFICATE_TYPE" in
         ;;
     DEVELOPER_ID)
         API_CERT_TYPE="DEVELOPER_ID_APPLICATION"
-        PROFILE_TYPE="IOS_APP_ADHOC"
+        PROFILE_TYPE="MAC_APP_DIRECT"
         PROFILE_SUFFIX="DeveloperID"
         ;;
     *)
