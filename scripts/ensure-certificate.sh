@@ -15,6 +15,7 @@ set -euo pipefail
 #
 # Optional environment variables:
 #   CERT_RENEWAL_BUFFER_DAYS                 - Days before expiry to trigger renewal (default: 30)
+#   CERTIFICATE_TYPE                         - Certificate type: APP_STORE or DEVELOPER_ID (default: APP_STORE)
 #
 # Outputs (via $GITHUB_OUTPUT):
 #   P12_DISTRIBUTION_CERTIFICATE_BASE64 - P12 certificate, base64-encoded
@@ -29,6 +30,28 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 API_BASE_URL="https://api.appstoreconnect.apple.com/v1"
 CERT_RENEWAL_BUFFER_DAYS="${CERT_RENEWAL_BUFFER_DAYS:-30}"
 export CERT_RENEWAL_BUFFER_DAYS
+
+# Certificate type configuration
+CERTIFICATE_TYPE="${CERTIFICATE_TYPE:-APP_STORE}"
+case "$CERTIFICATE_TYPE" in
+    APP_STORE)
+        API_CERT_TYPE="DISTRIBUTION"
+        PROFILE_TYPE="IOS_APP_STORE"
+        PROFILE_SUFFIX="AppStore"
+        ;;
+    DEVELOPER_ID)
+        API_CERT_TYPE="DEVELOPER_ID_APPLICATION"
+        PROFILE_TYPE="MAC_APP_DIRECT"
+        PROFILE_SUFFIX="DeveloperID"
+        ;;
+    *)
+        echo "ERROR: Invalid CERTIFICATE_TYPE '$CERTIFICATE_TYPE'. Must be APP_STORE or DEVELOPER_ID." >&2
+        exit 1
+        ;;
+esac
+export API_CERT_TYPE
+export PROFILE_TYPE
+export PROFILE_SUFFIX
 
 # ─── JWT Generation ──────────────────────────────────────────────────────────
 
@@ -111,7 +134,7 @@ api_delete() { api_call DELETE "$1"; }
 # ─── Certificate Management ─────────────────────────────────────────────────
 
 list_distribution_certificates() {
-    api_get "$API_BASE_URL/certificates?filter[certificateType]=DISTRIBUTION&limit=200"
+    api_get "$API_BASE_URL/certificates?filter[certificateType]=$API_CERT_TYPE&limit=200"
 }
 
 delete_certificate() {
@@ -123,7 +146,7 @@ delete_certificate() {
 create_certificate() {
     local csr_file="$1"
     local payload
-    payload=$(CSR_FILE="$csr_file" python3 << 'PYEOF'
+    payload=$(CSR_FILE="$csr_file" API_CERT_TYPE="$API_CERT_TYPE" python3 << 'PYEOF'
 import json, os
 with open(os.environ["CSR_FILE"]) as f:
     csr = f.read()
@@ -131,7 +154,7 @@ print(json.dumps({
     "data": {
         "type": "certificates",
         "attributes": {
-            "certificateType": "DISTRIBUTION",
+            "certificateType": os.environ["API_CERT_TYPE"],
             "csrContent": csr
         }
     }
@@ -144,7 +167,7 @@ PYEOF
 # ─── Provisioning Profile Management ──────────────────────────────────────────
 
 list_appstore_profiles() {
-    api_get "$API_BASE_URL/profiles?filter[profileType]=IOS_APP_STORE&limit=200"
+    api_get "$API_BASE_URL/profiles?filter[profileType]=$PROFILE_TYPE&limit=200"
 }
 
 delete_profile() {
@@ -181,7 +204,7 @@ CERT_PATH="$WORK_DIR/certificate.cer"
 export CERT_PATH
 export PRIVATE_KEY_PATH
 
-echo "==> Listing existing distribution certificates..."
+echo "==> Listing existing $CERTIFICATE_TYPE certificates..."
 list_distribution_certificates > "$WORK_DIR/certs_response.json"
 
 # Python: compare each cert's public key modulus against our private key.
@@ -210,7 +233,7 @@ with open(os.path.join(work_dir, "certs_response.json")) as f:
     data = json.load(f)
 
 certs = data.get("data", [])
-print(f"Found {len(certs)} distribution certificate(s).", file=sys.stderr)
+print(f"Found {len(certs)} certificate(s).", file=sys.stderr)
 
 now = datetime.datetime.now(datetime.timezone.utc)
 buffer = datetime.timedelta(days=buffer_days)
@@ -446,15 +469,15 @@ if [ "$PROFILE_ACTION" = "REUSE" ]; then
 else
     echo "==> Creating new provisioning profile..."
 
-    PROFILE_NAME="PIPE: ${BUNDLE_IDENTIFIER} AppStore"
-    PROFILE_PAYLOAD=$(PROFILE_NAME="$PROFILE_NAME" BUNDLE_RESOURCE_ID="$BUNDLE_ID_RESOURCE_ID" CERT_ID="$CERT_ID" python3 << 'PYEOF'
+    PROFILE_NAME="PIPE: ${BUNDLE_IDENTIFIER} ${PROFILE_SUFFIX}"
+    PROFILE_PAYLOAD=$(PROFILE_NAME="$PROFILE_NAME" BUNDLE_RESOURCE_ID="$BUNDLE_ID_RESOURCE_ID" CERT_ID="$CERT_ID" PROFILE_TYPE="$PROFILE_TYPE" python3 << 'PYEOF'
 import json, os
 print(json.dumps({
     "data": {
         "type": "profiles",
         "attributes": {
             "name": os.environ["PROFILE_NAME"],
-            "profileType": "IOS_APP_STORE"
+            "profileType": os.environ["PROFILE_TYPE"]
         },
         "relationships": {
             "bundleId": {

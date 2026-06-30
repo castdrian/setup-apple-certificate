@@ -25,6 +25,10 @@ inputs:
     description: Days before certificate expiry to trigger renewal
     required: false
     default: "14"
+  certificate-type:
+    description: 'Certificate type to create/reuse: APP_STORE (default) or DEVELOPER_ID'
+    required: false
+    default: "APP_STORE"
 
 outputs:
   p12-certificate-base64:
@@ -56,6 +60,7 @@ runs:
         DISTRIBUTION_PRIVATE_KEY_BASE64: ${{ inputs.distribution-private-key }}
         BUNDLE_IDENTIFIER: ${{ inputs.bundle-identifier }}
         CERT_RENEWAL_BUFFER_DAYS: ${{ inputs.cert-renewal-buffer-days }}
+        CERTIFICATE_TYPE: ${{ inputs.certificate-type }}
       run: |
         chmod +x "${{ github.action_path }}/scripts/ensure-certificate.sh"
         "${{ github.action_path }}/scripts/ensure-certificate.sh"
